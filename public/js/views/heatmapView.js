@@ -29,7 +29,15 @@ class HeatmapView {
 
     const isRGB = computation.indexType === 'RGB' || computation.index === 'RGB';
 
-    if (!isRGB) {
+    if (isRGB) {
+      const tileUrl = computation.tileUrl || 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg';
+      this.rasterOverlay = L.tileLayer(tileUrl, {
+        maxZoom: 19,
+        opacity: 1.0,
+        zIndex: 5,
+        attribution: 'Sentinel-2 L2A True Color / EOX / ESA'
+      }).addTo(map);
+    } else {
       if (mode === 'raster') {
         this._renderRasterBicubic(map, polygon, computation);
       } else {
@@ -59,22 +67,24 @@ class HeatmapView {
   }
 
   _renderVectorZones(map, polygon, computation) {
-    // 1. Se vectorLayer estiver presente na resposta (MVSky nativo: 576 microzonas poligonais)
+    // 1. Se vectorLayer estiver presente na resposta (MVSky nativo: Zonas de Manejo ML)
     if (computation.vectorLayer?.features?.length > 0) {
       this.vectorOverlay = L.geoJSON(computation.vectorLayer, {
         style: (feature) => ({
           fillColor: feature.properties?.color || feature.properties?.fill || '#10b981',
           fillOpacity: 0.85,
           weight: 0.35,
-          color: 'rgba(255, 255, 255, 0.4)'
+          color: 'rgba(255, 255, 255, 0.45)'
         }),
         onEachFeature: (feature, layer) => {
           const props = feature.properties || {};
-          const className = props.className || 'Zona de Manejo';
-          const mean = typeof props.mean === 'number' ? props.mean.toFixed(3) : '-';
+          const className = props.className || props.name || 'Zona de Manejo';
+          const meanVal = props.mean ?? props.ndvi ?? props.ndre ?? props.msavi ?? props.ndmi ?? props.reci ?? props.value;
+          const mean = typeof meanVal === 'number' ? meanVal.toFixed(3) : '-';
           const areaHa = typeof props.areaHa === 'number' ? `${props.areaHa.toFixed(2)} ha` : '';
+          const range = props.range ? `<br/><span style="color:#666;font-size:10px;">Faixa: ${props.range}</span>` : '';
           const rec = props.recommendation ? `<br/><span style="color:#003732;font-size:11px;">${props.recommendation}</span>` : '';
-          layer.bindTooltip(`<strong>${className}</strong><br/>Índice Médio: ${mean}<br/>Área: ${areaHa}${rec}`, {
+          layer.bindTooltip(`<strong>${className}</strong><br/>Índice Médio: ${mean}<br/>Área: ${areaHa}${range}${rec}`, {
             sticky: true,
             className: 'agro-tooltip'
           });
@@ -165,6 +175,16 @@ class HeatmapView {
   }
 
   _renderRasterBicubic(map, polygon, computation) {
+    if (computation.imageBase64) {
+      const bbox = this._extractBBox(polygon, computation);
+      const bounds = [[bbox.minLat, bbox.minLng], [bbox.maxLat, bbox.maxLng]];
+      this.rasterOverlay = L.imageOverlay('data:image/png;base64,' + computation.imageBase64, bounds, {
+        opacity: 0.88,
+        interactive: false
+      }).addTo(map);
+      return;
+    }
+
     // Se a resposta MVSky tiver vectorLayer (alta qualidade com centenas de polígonos), usa-o como renderização principal
     if (computation.vectorLayer?.features?.length > 0) {
       return this._renderVectorZones(map, polygon, computation);

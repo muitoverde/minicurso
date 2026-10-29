@@ -141,22 +141,69 @@ async function accountRequest(req, path, method = 'GET', body) {
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
+export function sanitizeGeometryToPolygon(raw) {
+  if (!raw) return null;
+  let geom = raw;
+  if (typeof geom === 'string') {
+    try { geom = JSON.parse(geom); } catch { return null; }
+  }
+  if (!geom) return null;
+  if (geom.type === 'Feature') geom = geom.geometry;
+  if (geom.type === 'FeatureCollection' && Array.isArray(geom.features) && geom.features[0]) {
+    geom = geom.features[0].geometry;
+  }
+  if (!geom || !geom.coordinates) return null;
+
+  let rawCoords = geom.coordinates;
+  if (geom.type === 'MultiPolygon') {
+    rawCoords = rawCoords.reduce((best, poly) => {
+      const len = Array.isArray(poly?.[0]) ? poly[0].length : 0;
+      const bestLen = Array.isArray(best?.[0]) ? best[0].length : 0;
+      return len > bestLen ? poly : best;
+    }, rawCoords[0]) || [];
+  }
+
+  if (!Array.isArray(rawCoords)) return null;
+  if (rawCoords.length === 0) {
+    return { type: 'Polygon', coordinates: [] };
+  }
+
+  const rings = rawCoords.map(ring => {
+    if (!Array.isArray(ring)) return [];
+    return ring.map(pt => {
+      if (Array.isArray(pt)) {
+        return [Number(pt[0]), Number(pt[1])];
+      }
+      if (pt && typeof pt === 'object') {
+        const lng = Number(pt.lng ?? pt.lon ?? pt.x);
+        const lat = Number(pt.lat ?? pt.y);
+        return [lng, lat];
+      }
+      return null;
+    }).filter(pt => Array.isArray(pt) && !isNaN(pt[0]) && !isNaN(pt[1]));
+  }).filter(ring => ring.length >= 3);
+
+  if (rings.length === 0) return null;
+
+  for (const ring of rings) {
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]]);
+    }
+  }
+
+  return {
+    type: 'Polygon',
+    coordinates: rings
+  };
+}
+
 export function mapProperty(p) {
   return { ...p, municipality: p.location_description || p.locationDescription || p.city || '', totalAreaHa: Number(p.total_area_ha || 0) };
 }
 export function mapField(f) {
-  let polygon = f.geometry || f.polygon;
-  if (typeof polygon === 'string') { try { polygon = JSON.parse(polygon); } catch { polygon = null; } }
-  if (polygon && Array.isArray(polygon.coordinates)) {
-    polygon = {
-      type: 'Polygon',
-      coordinates: polygon.coordinates.map(ring =>
-        Array.isArray(ring)
-          ? ring.map(pt => [Number(pt[0]), Number(pt[1])])
-          : ring
-      )
-    };
-  }
+  const polygon = sanitizeGeometryToPolygon(f.geometry || f.polygon);
   return { ...f, propertyId: f.property_id || f.propertyId, crop: f.primary_activity_species || f.primary_activity_category || '',
     areaHectares: Number(f.area_hectares || f.areaHectares || 0), polygon, latestNdvi: f.latest_ndvi ?? null, latestDate: f.latest_capture_date ?? null };
 }

@@ -112,9 +112,49 @@ test('integração da conta, isolada e sem alterações em produção', async t 
   await t.test('índice continua usando chave B2B e polígono', async () => {
     global.fetch = async (url, options) => {
       assert.ok(url.endsWith('/geo/spectral-index')); assert.equal(options.headers['X-API-Key'], 'test-b2b-key');
-      return reply({ data: { metering: { balanceAfter: 95 } } });
+      return reply({ data: { computation: { vectorLayer: { features: Array.from({ length: 20 }) } }, metering: { balanceAfter: 95 } } });
     };
     assert.equal((await invoke(handleAnalyze, { cookie: a.cookie, body: { indexType: 'NDVI', polygon: { type: 'Polygon', coordinates: [] } } })).status, 200);
+  });
+  await t.test('análise RGB retorna camada Sentinel-2 True Color com tileUrl', async () => {
+    const r = await invoke(handleAnalyze, { cookie: a.cookie, body: { indexType: 'RGB', polygon: { type: 'Polygon', coordinates: [] } } });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.data.computation.indexType, 'RGB');
+    assert.ok(r.data.data.computation.tileUrl.includes('s2cloudless') || r.data.data.computation.tileUrl.includes('tile'));
+  });
+  await t.test('malha sintética de 576 blocos é convertida em MVSky ML com zonas agronômicas', async () => {
+    global.fetch = async (url) => {
+      if (url.includes('/geo/spectral-index')) {
+        // Simula backend B2B antigo retornando 576 blocos
+        return reply({ data: { computation: { vectorLayer: { features: Array.from({ length: 576 }) } } } });
+      }
+      if (url.includes('interpolate-ml')) {
+        return reply({
+          type: 'FeatureCollection',
+          features: [
+            { type: 'Feature', properties: { class: 0, min: 0.1, max: 0.25 }, geometry: { type: 'Polygon', coordinates: [] } }
+          ],
+          stats: {
+            mean: 0.45,
+            macroZones: [{ name: 'Crítico', range: '0.10 - 0.25', color: '#8B0000' }]
+          },
+          imageBase64: 'fake-png'
+        });
+      }
+      return reply({});
+    };
+    const r = await invoke(handleAnalyze, {
+      cookie: a.cookie,
+      body: {
+        indexType: 'NDRE',
+        polygon: { type: 'Polygon', coordinates: [[[-62.9, -9.9], [-62.8, -9.9], [-62.8, -9.8], [-62.9, -9.8], [-62.9, -9.9]]] }
+      }
+    });
+    assert.equal(r.status, 200);
+    const comp = r.data.data.computation;
+    assert.equal(comp.vectorLayer.features.length, 1);
+    assert.equal(comp.vectorLayer.features[0].properties.className, 'Crítico');
+    assert.equal(comp.imageBase64, 'fake-png');
   });
   await t.test('logout invalida somente a sessão atual', async () => {
     await invoke(account.handleLogout, { cookie: a.cookie });
