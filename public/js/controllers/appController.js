@@ -271,6 +271,7 @@ class AppController {
   _setupCamposHeroControls() {
     const toggleViewBtn = document.getElementById('btn-campos-view-mode');
     const addFieldBtn = document.getElementById('btn-campos-add-field');
+    const drawBtn = document.getElementById('btn-campos-draw');
     const refreshBtn = document.getElementById('btn-campos-refresh');
 
     if (toggleViewBtn) {
@@ -282,6 +283,10 @@ class AppController {
 
     if (addFieldBtn) {
       addFieldBtn.addEventListener('click', () => this.openFieldModal());
+    }
+
+    if (drawBtn) {
+      drawBtn.addEventListener('click', () => this.startInteractiveDrawing());
     }
 
     if (refreshBtn) {
@@ -457,6 +462,30 @@ class AppController {
         this.openPropertyModal();
       });
     }
+
+    const modalDrawBtn = document.getElementById('btn-draw-field-modal');
+    if (modalDrawBtn) {
+      modalDrawBtn.addEventListener('click', () => {
+        this.closeFieldModal();
+        this.startInteractiveDrawing();
+      });
+    }
+  }
+
+  startInteractiveDrawing() {
+    mapView.startDrawing((polygon, areaHa) => {
+      this.openFieldModal();
+      const geoInput = document.getElementById('field-geojson');
+      if (geoInput) geoInput.value = JSON.stringify(polygon, null, 2);
+      const nameInput = document.getElementById('field-name');
+      if (nameInput && !nameInput.value) {
+        nameInput.value = `Novo Talhão (${areaHa.toFixed(1)} ha)`;
+      }
+      const cropInput = document.getElementById('field-crop');
+      if (cropInput && !cropInput.value) {
+        cropInput.value = 'Café Robusta';
+      }
+    });
   }
 
   openPropertyModal() {

@@ -98,12 +98,16 @@ class SpectralModel {
 
     const comp = data.data?.computation || data.data || data;
 
-    // Normalização das estruturas espaciais
+    // Normalização completa preservando metadados biofísicos oficiais
     return {
+      ...comp,
       indexType: comp.indexType || indexType,
+      stats: comp.stats || comp.statistics || {},
       statistics: comp.stats || comp.statistics || {},
+      legend: comp.legend || [],
       spatialGrid: comp.spatialGrid || comp.matrix || null,
       vectorLayer: comp.vectorLayer || null,
+      diagnostic: comp.diagnostic || comp.summary || null,
       summary: comp.diagnostic || comp.summary || null,
       historicalSeries: comp.historicalSeries || [],
       bbox: comp.bbox || null,

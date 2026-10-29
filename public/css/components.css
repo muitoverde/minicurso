@@ -436,6 +436,60 @@
   color: var(--text-muted);
 }
 
+/* Banner Flutuante de Demarcação / Desenho no Mapa */
+.drawing-banner-card {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+  padding: 10px 18px;
+  color: #f8fafc;
+  font-family: 'Quicksand', sans-serif;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.drawing-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawing-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseEmerald 1.5s infinite;
+}
+
+@keyframes pulseEmerald {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.drawing-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .campos-hero-controls {
   display: flex;
   align-items: center;

@@ -65,6 +65,14 @@ class StatsView {
       if (emptyBtn && onNew) {
         emptyBtn.onclick = () => onNew();
       }
+      const emptyDrawBtn = document.getElementById('btn-empty-draw-field');
+      if (emptyDrawBtn && onNew) {
+        emptyDrawBtn.onclick = () => {
+          const drawBtn = document.getElementById('btn-campos-draw');
+          if (drawBtn) drawBtn.click();
+          else onNew();
+        };
+      }
       return;
     }
 
@@ -312,7 +320,7 @@ class StatsView {
   }
 
   _extractDistribution(computation, indexName = '') {
-    const totalArea = computation.areaHectares || 23.4;
+    const totalArea = Number(computation.areaHectares || computation.stats?.areaHectares || 23.4);
 
     if (indexName === 'RGB' || computation.indexType === 'RGB') {
       return [
@@ -322,22 +330,10 @@ class StatsView {
       ];
     }
 
-    if (Array.isArray(computation.legend) && computation.legend.length > 0) {
-      return computation.legend.map(l => {
-        const pct = l.label.includes('Excelente') ? 60 : (l.label.includes('Bom') ? 30 : 10);
-        return {
-          color: l.colorHex,
-          range: `${l.min} a ${l.max}`,
-          className: l.label,
-          areaHa: (totalArea * pct) / 100,
-          areaPct: pct
-        };
-      });
-    }
-
+    // 1. Se vectorLayer estiver presente (zonas de manejo vetoriais com área)
     if (computation.vectorLayer?.features?.length > 0) {
       const zoneMap = new Map();
-      let totalArea = 0;
+      let totalFeatArea = 0;
       for (const f of computation.vectorLayer.features) {
         const p = f.properties || {};
         const key = p.className || `Classe ${p.class ?? 'N/A'}`;
@@ -350,13 +346,68 @@ class StatsView {
           });
         }
         const z = zoneMap.get(key);
-        const aHa = p.areaHa || 1;
+        const aHa = Number(p.areaHa || 0);
         z.areaHa += aHa;
-        totalArea += aHa;
+        totalFeatArea += aHa;
       }
-      return Array.from(zoneMap.values()).map(z => ({
-        ...z,
-        areaPct: totalArea > 0 ? (z.areaHa / totalArea) * 100 : 0
+      if (totalFeatArea > 0) {
+        return Array.from(zoneMap.values()).map(z => ({
+          ...z,
+          areaPct: (z.areaHa / totalFeatArea) * 100
+        }));
+      }
+    }
+
+    // 2. Se spatialGrid estiver presente, calcula a distribuição REAL pixel a pixel
+    const grid = computation.spatialGrid;
+    const legend = computation.legend;
+    if (grid?.values && Array.isArray(grid.values) && Array.isArray(legend) && legend.length > 0) {
+      const counts = new Array(legend.length).fill(0);
+      let totalValidPixels = 0;
+
+      const rows = grid.rows || grid.values.length;
+      const cols = grid.cols || (Array.isArray(grid.values[0]) ? grid.values[0].length : 12);
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const val = Array.isArray(grid.values[r]) ? grid.values[r][c] : grid.values[r * cols + c];
+          if (val === null || val === undefined || isNaN(val)) continue;
+          totalValidPixels++;
+
+          const idx = legend.findIndex(l => val >= l.min && val <= l.max);
+          if (idx !== -1) {
+            counts[idx]++;
+          } else if (val < legend[0].min) {
+            counts[0]++;
+          } else {
+            counts[legend.length - 1]++;
+          }
+        }
+      }
+
+      if (totalValidPixels > 0) {
+        return legend.map((l, i) => {
+          const pct = (counts[i] / totalValidPixels) * 100;
+          return {
+            color: l.colorHex,
+            range: `${l.min} a ${l.max}`,
+            className: l.label,
+            areaHa: (totalArea * pct) / 100,
+            areaPct: pct
+          };
+        });
+      }
+    }
+
+    // 3. Fallback se não houver matriz
+    if (Array.isArray(legend) && legend.length > 0) {
+      const evenPct = 100 / legend.length;
+      return legend.map(l => ({
+        color: l.colorHex,
+        range: `${l.min} a ${l.max}`,
+        className: l.label,
+        areaHa: (totalArea * evenPct) / 100,
+        areaPct: evenPct
       }));
     }
 

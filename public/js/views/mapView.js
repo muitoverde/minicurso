@@ -74,6 +74,175 @@ class MapView {
     }).addTo(this.map);
   }
 
+  // --- Sistema de Demarcação / Desenho Interativo de Talhão (1:1 Alvo Certo) ---
+
+  startDrawing(onComplete) {
+    if (!this.map) return;
+    this.cancelDrawing();
+    this.isDrawing = true;
+    this.onPolygonDrawnCallback = onComplete;
+    this.drawingPoints = [];
+    this.drawingMarkers = [];
+    this.map.getContainer().style.cursor = 'crosshair';
+
+    this._showDrawingBanner();
+
+    this.mapClickHandler = (e) => {
+      if (!this.isDrawing) return;
+      this.addDrawingPoint(e.latlng);
+    };
+
+    this.map.on('click', this.mapClickHandler);
+  }
+
+  addDrawingPoint(latlng) {
+    const isFirst = this.drawingPoints.length === 0;
+    this.drawingPoints.push(latlng);
+
+    const marker = L.circleMarker(latlng, {
+      radius: isFirst ? 7 : 5,
+      color: isFirst ? '#EA580C' : '#10b981',
+      fillColor: isFirst ? '#FED7AA' : '#ffffff',
+      fillOpacity: 1,
+      weight: 2
+    }).addTo(this.map);
+
+    if (isFirst) {
+      marker.bindTooltip('Clique para fechar o talhão', { permanent: false, direction: 'top' });
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (this.drawingPoints.length >= 3) {
+          this.finishDrawing();
+        }
+      });
+    }
+
+    this.drawingMarkers.push(marker);
+    this._updateDrawingPreview();
+  }
+
+  _updateDrawingPreview() {
+    if (this.drawingPolyline) {
+      this.map.removeLayer(this.drawingPolyline);
+      this.drawingPolyline = null;
+    }
+    if (this.drawingPolygonPreview) {
+      this.map.removeLayer(this.drawingPolygonPreview);
+      this.drawingPolygonPreview = null;
+    }
+
+    if (this.drawingPoints.length >= 2) {
+      this.drawingPolyline = L.polyline(this.drawingPoints, {
+        color: '#10b981',
+        weight: 2.5,
+        dashArray: '5, 5'
+      }).addTo(this.map);
+    }
+
+    if (this.drawingPoints.length >= 3) {
+      this.drawingPolygonPreview = L.polygon(this.drawingPoints, {
+        color: '#10b981',
+        weight: 2,
+        fillColor: '#10b981',
+        fillOpacity: 0.15
+      }).addTo(this.map);
+    }
+
+    const areaHa = this._calculateSphericalArea(this.drawingPoints);
+    this._updateDrawingBanner(this.drawingPoints.length, areaHa);
+  }
+
+  finishDrawing() {
+    if (!this.isDrawing || this.drawingPoints.length < 3) {
+      alert('Demarque pelo menos 3 pontos no mapa para formar a área do talhão.');
+      return;
+    }
+
+    const ring = this.drawingPoints.map(p => [Number(p.lng.toFixed(6)), Number(p.lat.toFixed(6))]);
+    if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) {
+      ring.push([ring[0][0], ring[0][1]]);
+    }
+
+    const geoJsonPolygon = {
+      type: 'Polygon',
+      coordinates: [ring]
+    };
+
+    const areaHa = this._calculateSphericalArea(this.drawingPoints);
+    const cb = this.onPolygonDrawnCallback;
+    this.cancelDrawing();
+
+    if (cb) {
+      cb(geoJsonPolygon, areaHa);
+    }
+  }
+
+  cancelDrawing() {
+    this.isDrawing = false;
+    if (this.map) {
+      this.map.getContainer().style.cursor = '';
+      if (this.mapClickHandler) {
+        this.map.off('click', this.mapClickHandler);
+        this.mapClickHandler = null;
+      }
+    }
+    if (this.drawingPolyline && this.map) {
+      this.map.removeLayer(this.drawingPolyline);
+      this.drawingPolyline = null;
+    }
+    if (this.drawingPolygonPreview && this.map) {
+      this.map.removeLayer(this.drawingPolygonPreview);
+      this.drawingPolygonPreview = null;
+    }
+    if (this.drawingMarkers && this.map) {
+      this.drawingMarkers.forEach(m => this.map.removeLayer(m));
+      this.drawingMarkers = [];
+    }
+    this.drawingPoints = [];
+    this._hideDrawingBanner();
+  }
+
+  _calculateSphericalArea(latlngs) {
+    if (!latlngs || latlngs.length < 3) return 0;
+    const RADIUS = 6378137;
+    let total = 0;
+    const len = latlngs.length;
+    for (let i = 0; i < len; i++) {
+      const p1 = latlngs[i];
+      const p2 = latlngs[(i + 1) % len];
+      const x1 = (p1.lng * Math.PI) / 180;
+      const y1 = (p1.lat * Math.PI) / 180;
+      const x2 = (p2.lng * Math.PI) / 180;
+      const y2 = (p2.lat * Math.PI) / 180;
+      total += (x2 - x1) * (2 + Math.sin(y1) + Math.sin(y2));
+    }
+    const areaSqM = Math.abs((total * RADIUS * RADIUS) / 2);
+    return Math.round((areaSqM / 10000) * 100) / 100;
+  }
+
+  _showDrawingBanner() {
+    const banner = document.getElementById('drawing-banner');
+    const finishBtn = document.getElementById('btn-drawing-finish');
+    const cancelBtn = document.getElementById('btn-drawing-cancel');
+
+    if (banner) banner.style.display = 'flex';
+    if (finishBtn) finishBtn.onclick = () => this.finishDrawing();
+    if (cancelBtn) cancelBtn.onclick = () => this.cancelDrawing();
+    this._updateDrawingBanner(0, 0);
+  }
+
+  _hideDrawingBanner() {
+    const banner = document.getElementById('drawing-banner');
+    if (banner) banner.style.display = 'none';
+  }
+
+  _updateDrawingBanner(count, areaHa) {
+    const sub = document.getElementById('drawing-banner-sub');
+    if (sub) {
+      sub.textContent = `${count} ${count === 1 ? 'vértice demarcado' : 'vértices demarcados'} • ${areaHa.toFixed(2)} ha calculados`;
+    }
+  }
+
   _setupDrawerCollapse() {
     const btn = document.getElementById('btn-toggle-drawer');
     const panel = document.getElementById('monitoring-panel');

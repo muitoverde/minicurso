@@ -186,9 +186,9 @@ class HeatmapView {
     const ctx1 = canvas1.getContext('2d');
     const imgData = ctx1.createImageData(cols, rows);
 
-    const normMin = -0.2;
-    const normMax = 1.0;
-    const normRange = normMax - normMin;
+    const normMin = Array.isArray(computation.legend) && computation.legend.length > 0 ? computation.legend[0].min : -0.2;
+    const normMax = Array.isArray(computation.legend) && computation.legend.length > 0 ? computation.legend[computation.legend.length - 1].max : 1.0;
+    const normRange = (normMax - normMin) || 1.0;
 
     const palette = [
       '#4a0000', '#7a0e0e', '#a81c1c', '#c72c2c', '#d9482b',

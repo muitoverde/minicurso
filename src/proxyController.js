@@ -1,62 +1,11 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
-
-// Garante existência da pasta data e do banco local db.json
-function ensureDb() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DB_FILE)) {
-      const initial = {
-        session: {
-          authenticated: false,
-          apiKey: null,
-          user: null,
-          wallet: null
-        },
-        properties: [],
-        fields: []
-      };
-      fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
-    }
-  } catch (err) {
-    console.error('[proxyController] Erro ao inicializar db.json:', err);
-  }
-}
-
-ensureDb();
-
-function readDb() {
-  try {
-    ensureDb();
-    const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('[proxyController] Erro ao ler db.json:', err);
-    return {
-      session: { authenticated: false, apiKey: null, user: null, wallet: null },
-      properties: [],
-      fields: []
-    };
-  }
-}
-
-function writeDb(data) {
-  try {
-    ensureDb();
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('[proxyController] Erro ao salvar db.json:', err);
-  }
-}
+let inMemorySession = {
+  authenticated: false,
+  apiKey: null,
+  user: null,
+  wallet: null
+};
 
 function sendJSON(res, statusCode, data) {
   res.writeHead(statusCode, {
@@ -87,11 +36,14 @@ function parseJSONBody(req) {
   });
 }
 
+function getEffectiveApiKey() {
+  return inMemorySession.apiKey || (config.MUITOVERDE_API_KEY ? String(config.MUITOVERDE_API_KEY).trim() : null);
+}
+
 // 1. Rota de Login (Validação Direta via API Muito Verde)
 export async function handleLogin(req, res) {
   try {
     const payload = await parseJSONBody(req);
-    // Puxa chave do payload ou automaticamente do .env.local (MUITOVERDE_API_KEY)
     let keyToUse = payload.apiKey ? String(payload.apiKey).trim() : '';
     keyToUse = keyToUse.replace(/^['"`]|['"`]$/g, '').trim();
 
@@ -140,11 +92,10 @@ export async function handleLogin(req, res) {
     }
 
     const isCnpj = appData.accountTier === 'business_cnpj';
-    const db = readDb();
     const userEmail = payload.email ? String(payload.email).trim() : '';
     const userName = userEmail ? userEmail.split('@')[0] : (appData.name || 'Produtor Muito Verde');
 
-    db.session = {
+    inMemorySession = {
       authenticated: true,
       apiKey: keyToUse,
       user: {
@@ -162,14 +113,12 @@ export async function handleLogin(req, res) {
       }
     };
 
-    writeDb(db);
-
     return sendJSON(res, 200, {
       success: true,
       session: {
         authenticated: true,
-        user: db.session.user,
-        wallet: db.session.wallet
+        user: inMemorySession.user,
+        wallet: inMemorySession.wallet
       }
     });
   } catch (err) {
@@ -182,24 +131,21 @@ export async function handleLogin(req, res) {
 
 // 2. Consulta de Sessão
 export function handleGetSession(req, res) {
-  const db = readDb();
   return sendJSON(res, 200, {
-    authenticated: Boolean(db.session?.authenticated),
-    user: db.session?.user || null,
-    wallet: db.session?.wallet || null
+    authenticated: Boolean(inMemorySession.authenticated),
+    user: inMemorySession.user || null,
+    wallet: inMemorySession.wallet || null
   });
 }
 
 // 3. Logout
 export function handleLogout(req, res) {
-  const db = readDb();
-  db.session = {
+  inMemorySession = {
     authenticated: false,
     apiKey: null,
     user: null,
     wallet: null
   };
-  writeDb(db);
 
   return sendJSON(res, 200, {
     success: true,
@@ -211,69 +157,44 @@ export function handleLogout(req, res) {
   });
 }
 
-// 4. Listagem de Propriedades (Fazendas) — Integrado com API Muito Verde via Chave B2B (.env.local)
+// 4. Listagem de Propriedades (Fazendas) — 100% via API Muito Verde
 export async function handleGetProperties(req, res) {
-  const db = readDb();
-  const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
+  const effectiveApiKey = getEffectiveApiKey();
 
-  if (effectiveApiKey && effectiveApiKey !== 'INSIRA_SUA_CHAVE_AQUI') {
-    try {
-      const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/mcp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': effectiveApiKey,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: Date.now(),
-          method: 'tools/call',
-          params: {
-            name: 'mv_query_field_notebook',
-            arguments: { module: 'properties' },
-          },
-        }),
-      });
-
-      if (response.ok) {
-        const rpc = await response.json();
-        const textContent = rpc.result?.content?.[0]?.text;
-        if (textContent) {
-          const parsed = JSON.parse(textContent);
-          if (Array.isArray(parsed.properties) && parsed.properties.length > 0) {
-            const apiProperties = parsed.properties.map(p => ({
-              id: p.id,
-              name: p.name,
-              municipality: p.municipality || p.city || 'Rondônia',
-              car: p.carCode || '',
-              totalAreaHa: p.totalAreaHa || 0,
-              fieldsCount: p.fieldsCount || 0,
-            }));
-
-            // Mescla com propriedades criadas localmente para não perder dados locais
-            const localProperties = db.properties || [];
-            const merged = [...apiProperties];
-            for (const lp of localProperties) {
-              if (!merged.find(m => m.id === lp.id || m.name === lp.name)) {
-                merged.push(lp);
-              }
-            }
-            return sendJSON(res, 200, { success: true, properties: merged });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[proxyController] Consulta remota de propriedades via MCP falhou, usando local:', err.message);
-    }
+  if (!effectiveApiKey || effectiveApiKey === 'INSIRA_SUA_CHAVE_AQUI') {
+    return sendJSON(res, 200, { success: true, properties: [] });
   }
 
-  return sendJSON(res, 200, {
-    success: true,
-    properties: db.properties || [],
-  });
+  try {
+    const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/properties`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-API-Key': effectiveApiKey,
+      },
+    });
+
+    if (response.ok) {
+      const json = await response.json();
+      const rawProps = json.data?.properties || json.properties || [];
+      const apiProperties = rawProps.map(p => ({
+        id: p.id,
+        name: p.name,
+        municipality: p.municipality || p.locationDescription || p.city || 'Rondônia',
+        car: p.carCode || p.idaronCode || p.car || '',
+        totalAreaHa: p.totalAreaHa || 0,
+        fieldsCount: p.fieldsCount || 0,
+      }));
+      return sendJSON(res, 200, { success: true, properties: apiProperties });
+    }
+  } catch (err) {
+    console.warn('[proxyController] Consulta de propriedades via API falhou:', err.message);
+  }
+
+  return sendJSON(res, 200, { success: true, properties: [] });
 }
 
-// 5. Cadastro de Propriedade
+// 5. Cadastro de Propriedade — Via API Muito Verde de Produção
 export async function handleCreateProperty(req, res) {
   try {
     const payload = await parseJSONBody(req);
@@ -286,85 +207,97 @@ export async function handleCreateProperty(req, res) {
       });
     }
 
-    const db = readDb();
-    const newProperty = {
-      id: 'prop_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-      name: name.trim(),
-      municipality: municipality.trim(),
-      car: (car || '').trim(),
-      createdAt: new Date().toISOString()
-    };
+    const effectiveApiKey = getEffectiveApiKey();
+    if (!effectiveApiKey || effectiveApiKey === 'INSIRA_SUA_CHAVE_AQUI') {
+      return sendJSON(res, 401, {
+        success: false,
+        error: 'Sessão não autenticada com a Muito Verde.'
+      });
+    }
 
-    db.properties = db.properties || [];
-    db.properties.push(newProperty);
-    writeDb(db);
+    const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/properties`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': effectiveApiKey,
+      },
+      body: JSON.stringify({
+        name: name.trim(),
+        municipality: municipality.trim(),
+        car: (car || '').trim(),
+      }),
+    });
 
+    const json = await response.json();
+    if (!response.ok || json.success === false) {
+      return sendJSON(res, response.status, {
+        success: false,
+        error: json.error?.message || json.error || 'Falha ao salvar propriedade no banco de produção.'
+      });
+    }
+
+    const createdProp = json.data?.property || json.property || json;
     return sendJSON(res, 201, {
       success: true,
-      property: newProperty
+      property: {
+        id: createdProp.id,
+        name: createdProp.name,
+        municipality: createdProp.municipality || municipality,
+        car: createdProp.car || car || '',
+      }
     });
   } catch (err) {
-    return sendJSON(res, 400, {
+    return sendJSON(res, 500, {
       success: false,
-      error: err.message
+      error: 'Erro ao cadastrar propriedade na Muito Verde: ' + err.message
     });
   }
 }
 
-// 6. Listagem de Talhões (Campos) — Integrado com API Muito Verde via Chave B2B (.env.local)
+// 6. Listagem de Talhões — 100% via Banco de Dados de Produção da Muito Verde
 export async function handleGetFields(req, res, url) {
-  const db = readDb();
   const propertyId = url.searchParams.get('propertyId');
-  const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
+  const effectiveApiKey = getEffectiveApiKey();
 
-  let remoteFields = [];
-  if (effectiveApiKey && effectiveApiKey !== 'INSIRA_SUA_CHAVE_AQUI') {
-    try {
-      const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/fields`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'X-API-Key': effectiveApiKey,
-        },
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        const apiFields = json.data?.fields || [];
-        remoteFields = apiFields.map(f => ({
-          id: f.id,
-          propertyId: f.propertyId || propertyId || null,
-          name: f.name,
-          crop: f.crop || 'SAF Agroflorestal',
-          areaHectares: f.areaHectares || 0,
-          polygon: f.geometry,
-          latestNdvi: f.latestNdvi || null,
-          latestDate: f.latestCaptureDate || null,
-          source: f.source || 'muitoverde_b2b',
-        }));
-      }
-    } catch (err) {
-      console.warn('[proxyController] Consulta de talhões via API falhou, usando local:', err.message);
-    }
+  if (!effectiveApiKey || effectiveApiKey === 'INSIRA_SUA_CHAVE_AQUI') {
+    return sendJSON(res, 200, { success: true, fields: [] });
   }
 
-  const localFields = db.fields || [];
-  const merged = [...remoteFields];
-  for (const lf of localFields) {
-    if (!merged.find(m => m.id === lf.id)) {
-      merged.push(lf);
+  try {
+    const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/fields`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-API-Key': effectiveApiKey,
+      },
+    });
+
+    if (response.ok) {
+      const json = await response.json();
+      const apiFields = json.data?.fields || [];
+      const mapped = apiFields.map(f => ({
+        id: f.id,
+        propertyId: f.propertyId || propertyId || null,
+        name: f.name,
+        crop: f.crop || 'SAF Agroflorestal',
+        areaHectares: f.areaHectares || 0,
+        polygon: f.geometry || f.polygon,
+        latestNdvi: f.latestNdvi || null,
+        latestDate: f.latestCaptureDate || null,
+        source: f.source || 'muitoverde_production',
+      }));
+
+      const filtered = propertyId ? mapped.filter(f => !f.propertyId || f.propertyId === propertyId) : mapped;
+      return sendJSON(res, 200, { success: true, fields: filtered });
     }
+  } catch (err) {
+    console.warn('[proxyController] Consulta de talhões via API falhou:', err.message);
   }
 
-  const filtered = propertyId ? merged.filter(f => !f.propertyId || f.propertyId === propertyId) : merged;
-
-  return sendJSON(res, 200, {
-    success: true,
-    fields: filtered,
-  });
+  return sendJSON(res, 200, { success: true, fields: [] });
 }
 
-// 7. Cadastro de Talhão — Persistência Híbrida (API Muito Verde B2B + Cache Local)
+// 7. Cadastro de Talhão — 100% Persistido no Banco de Dados da Muito Verde
 export async function handleCreateField(req, res) {
   try {
     const payload = await parseJSONBody(req);
@@ -377,98 +310,62 @@ export async function handleCreateField(req, res) {
       });
     }
 
-    const db = readDb();
-    const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
-
-    let createdField = null;
-
-    // Tenta persistir diretamente na API Muito Verde
-    if (effectiveApiKey && effectiveApiKey !== 'INSIRA_SUA_CHAVE_AQUI') {
-      try {
-        const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/fields`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': effectiveApiKey,
-          },
-          body: JSON.stringify({
-            name: name.trim(),
-            crop: crop.trim(),
-            propertyId: propertyId || undefined,
-            polygon,
-          }),
-        });
-
-        if (response.ok) {
-          const json = await response.json();
-          const rf = json.data?.field;
-          if (rf) {
-            createdField = {
-              id: rf.id,
-              propertyId: propertyId || null,
-              name: rf.name,
-              crop: rf.crop,
-              areaHectares: rf.areaHectares,
-              polygon: rf.geometry,
-              createdAt: new Date().toISOString(),
-              source: 'muitoverde_b2b',
-            };
-          }
-        }
-      } catch (netErr) {
-        console.warn('[proxyController] Falha ao enviar talhão para API B2B, gravando localmente:', netErr.message);
-      }
+    const effectiveApiKey = getEffectiveApiKey();
+    if (!effectiveApiKey || effectiveApiKey === 'INSIRA_SUA_CHAVE_AQUI') {
+      return sendJSON(res, 401, {
+        success: false,
+        error: 'Sessão não autenticada com a Muito Verde.'
+      });
     }
 
-    // Se a API não respondeu ou houve falha, cria localmente
-    if (!createdField) {
-      let calculatedArea = 0;
-      try {
-        const coords = polygon.coordinates?.[0] || [];
-        if (coords.length >= 3) {
-          let area = 0;
-          for (let i = 0; i < coords.length - 1; i++) {
-            area += (coords[i][0] * coords[i + 1][1]) - (coords[i + 1][0] * coords[i][1]);
-          }
-          area = Math.abs(area) / 2;
-          calculatedArea = Math.round(area * 111320 * 111320 * Math.cos(-9.94 * Math.PI / 180) / 10000 * 10) / 10;
-        }
-      } catch {}
-
-      createdField = {
-        id: 'field_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-        propertyId: propertyId || null,
+    const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/fields`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': effectiveApiKey,
+      },
+      body: JSON.stringify({
         name: name.trim(),
         crop: crop.trim(),
-        areaHectares: calculatedArea > 0 ? calculatedArea : 4.8,
+        propertyId: propertyId || undefined,
         polygon,
-        createdAt: new Date().toISOString(),
-        source: 'local_db',
-      };
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok || json.success === false) {
+      return sendJSON(res, response.status, {
+        success: false,
+        error: json.error?.message || json.error || 'Falha ao salvar talhão no banco de produção.'
+      });
     }
 
-    db.fields = db.fields || [];
-    db.fields.push(createdField);
-    writeDb(db);
-
+    const createdField = json.data?.field || json.field || json;
     return sendJSON(res, 201, {
       success: true,
-      field: createdField,
+      field: {
+        id: createdField.id,
+        propertyId: createdField.propertyId || propertyId || null,
+        name: createdField.name,
+        crop: createdField.crop,
+        areaHectares: createdField.areaHectares,
+        polygon: createdField.geometry || createdField.polygon,
+        source: 'muitoverde_production'
+      }
     });
   } catch (err) {
-    return sendJSON(res, 400, {
+    return sendJSON(res, 500, {
       success: false,
-      error: err.message,
+      error: 'Erro ao cadastrar talhão na Muito Verde: ' + err.message
     });
   }
 }
 
-// 8. Análise Espectral Sentinel-2 (Proxy Seguro para Muito Verde / MVSky)
+// 8. Análise Espectral Sentinel-2 — Geoprocessamento Orbital Direto na Muito Verde
 export async function handleAnalyze(req, res) {
   try {
     const payload = await parseJSONBody(req);
-    const db = readDb();
-    const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
+    const effectiveApiKey = getEffectiveApiKey();
     if (!effectiveApiKey || effectiveApiKey === 'INSIRA_SUA_CHAVE_AQUI') {
       return sendJSON(res, 401, {
         success: false,
@@ -476,7 +373,6 @@ export async function handleAnalyze(req, res) {
       });
     }
 
-    // Interceptação de índices ópticos/topográficos não suportados no endpoint Zod da B2B API
     if (payload.indexType === 'RGB') {
       const captureDate = payload.date || payload.startDate || new Date().toISOString().slice(0, 10);
       return sendJSON(res, 200, {
@@ -493,7 +389,6 @@ export async function handleAnalyze(req, res) {
       });
     }
 
-    // Conversão do date para startDate e endDate obrigatórios no schema .strict()
     if (payload.date) {
       if (!payload.startDate) payload.startDate = payload.date;
       if (!payload.endDate) payload.endDate = payload.date;
@@ -506,11 +401,6 @@ export async function handleAnalyze(req, res) {
       if (payload[key] !== undefined && payload[key] !== null) {
         sanitizedParams[key] = payload[key];
       }
-    }
-
-    // Se o polígono geométrico estiver presente e o fieldId for local, envia o polígono
-    if (sanitizedParams.polygon && sanitizedParams.fieldId && sanitizedParams.fieldId.startsWith('field_')) {
-      delete sanitizedParams.fieldId;
     }
 
     const idempotencyKey = sanitizedParams.idempotencyKey ||
@@ -537,9 +427,8 @@ export async function handleAnalyze(req, res) {
     }
 
     const balanceAfter = data?.data?.metering?.balanceAfter ?? data?.metering?.balanceAfter;
-    if (db.session?.authenticated && balanceAfter !== undefined && balanceAfter !== null) {
-      db.session.wallet.credits = balanceAfter;
-      writeDb(db);
+    if (inMemorySession.authenticated && balanceAfter !== undefined && balanceAfter !== null) {
+      inMemorySession.wallet.credits = balanceAfter;
     }
 
     return sendJSON(res, response.status, data);
