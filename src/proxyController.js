@@ -46,12 +46,23 @@ export async function handleAnalyze(req, res) {
       }
     }
 
+    if (sanitizedParams.polygon && Array.isArray(sanitizedParams.polygon.coordinates)) {
+      sanitizedParams.polygon = {
+        type: 'Polygon',
+        coordinates: sanitizedParams.polygon.coordinates.map(ring =>
+          Array.isArray(ring)
+            ? ring.map(pt => [Number(pt[0]), Number(pt[1])])
+            : ring
+        )
+      };
+    }
+
     const idempotencyKey = sanitizedParams.idempotencyKey ||
       req.headers['idempotency-key'] ||
       'mvsky_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
 
     const apiUrl = `${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/spectral-index`;
-    const response = await fetch(apiUrl, {
+    let response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,6 +71,23 @@ export async function handleAnalyze(req, res) {
       },
       body: JSON.stringify(sanitizedParams)
     });
+
+    if (!response.ok && sanitizedParams.fieldId && sanitizedParams.polygon) {
+      const fallbackParams = { ...sanitizedParams };
+      delete fallbackParams.fieldId;
+      const retryResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': effectiveApiKey,
+          'Idempotency-Key': idempotencyKey + '_fb'
+        },
+        body: JSON.stringify(fallbackParams)
+      });
+      if (retryResponse.ok) {
+        response = retryResponse;
+      }
+    }
 
     const responseBody = await response.text();
     let data;

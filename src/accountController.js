@@ -147,6 +147,16 @@ export function mapProperty(p) {
 export function mapField(f) {
   let polygon = f.geometry || f.polygon;
   if (typeof polygon === 'string') { try { polygon = JSON.parse(polygon); } catch { polygon = null; } }
+  if (polygon && Array.isArray(polygon.coordinates)) {
+    polygon = {
+      type: 'Polygon',
+      coordinates: polygon.coordinates.map(ring =>
+        Array.isArray(ring)
+          ? ring.map(pt => [Number(pt[0]), Number(pt[1])])
+          : ring
+      )
+    };
+  }
   return { ...f, propertyId: f.property_id || f.propertyId, crop: f.primary_activity_species || f.primary_activity_category || '',
     areaHectares: Number(f.area_hectares || f.areaHectares || 0), polygon, latestNdvi: f.latest_ndvi ?? null, latestDate: f.latest_capture_date ?? null };
 }
