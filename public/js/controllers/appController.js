@@ -355,10 +355,11 @@ class AppController {
     // Modal Fazenda (Propriedade)
     const propModal = document.getElementById('property-modal');
     const propClose = document.getElementById('property-modal-close');
+    const propCancelBtn = document.getElementById('btn-cancel-prop');
     const propForm = document.getElementById('property-form');
-    const pasteFarmBtn = document.getElementById('btn-paste-farm-snippet');
 
     if (propClose) propClose.addEventListener('click', () => this.closePropertyModal());
+    if (propCancelBtn) propCancelBtn.addEventListener('click', () => this.closePropertyModal());
     if (propModal) {
       propModal.addEventListener('click', (e) => {
         if (e.target === propModal) this.closePropertyModal();
@@ -392,13 +393,95 @@ class AppController {
     // Modal Talhão (Campo)
     const fieldModal = document.getElementById('field-modal');
     const fieldClose = document.getElementById('field-modal-close');
+    const fieldCancelBtn = document.getElementById('btn-cancel-field');
     const fieldForm = document.getElementById('field-form');
-    const pasteFieldBtn = document.getElementById('btn-paste-field-snippet');
+    const cardDrawMap = document.getElementById('card-draw-map');
+    const fieldFileUpload = document.getElementById('field-file-upload');
+    const btnAdjustVertices = document.getElementById('btn-adjust-vertices');
 
     if (fieldClose) fieldClose.addEventListener('click', () => this.closeFieldModal());
+    if (fieldCancelBtn) fieldCancelBtn.addEventListener('click', () => this.closeFieldModal());
     if (fieldModal) {
       fieldModal.addEventListener('click', (e) => {
         if (e.target === fieldModal) this.closeFieldModal();
+      });
+    }
+
+    // Botão Desenhar no Mapa do Grid
+    if (cardDrawMap) {
+      cardDrawMap.addEventListener('click', () => {
+        const fieldName = document.getElementById('field-name')?.value.trim();
+        const propSelect = document.getElementById('field-property-select');
+        const errEl = document.getElementById('field-error-msg');
+
+        if (!fieldName) {
+          if (errEl) {
+            errEl.textContent = 'Por favor, informe o nome do talhão.';
+            errEl.style.display = 'block';
+          }
+          return;
+        }
+
+        if (!propSelect?.value) {
+          if (errEl) {
+            errEl.textContent = 'Por favor, selecione ou cadastre uma propriedade.';
+            errEl.style.display = 'block';
+          }
+          return;
+        }
+
+        this.closeFieldModal();
+        this.startInteractiveDrawing();
+      });
+    }
+
+    // Botão Ajustar Vértices na etapa de Revisão
+    if (btnAdjustVertices) {
+      btnAdjustVertices.addEventListener('click', () => {
+        this.closeFieldModal();
+        this.startInteractiveDrawing();
+      });
+    }
+
+    // Upload de Arquivo GeoJSON / JSON
+    if (fieldFileUpload) {
+      fieldFileUpload.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const errEl = document.getElementById('field-error-msg');
+        try {
+          const text = await file.text();
+          let parsed = JSON.parse(text);
+          let geometry = parsed;
+          if (parsed.type === 'FeatureCollection' && parsed.features?.length > 0) {
+            geometry = parsed.features[0].geometry;
+          } else if (parsed.type === 'Feature') {
+            geometry = parsed.geometry;
+          }
+
+          if (!geometry || (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon')) {
+            throw new Error('O arquivo deve conter uma geometria Polygon ou MultiPolygon.');
+          }
+
+          const ring = geometry.type === 'Polygon' ? geometry.coordinates[0] : geometry.coordinates[0][0];
+          const areaHa = mapView._calculateSphericalArea(ring);
+
+          const nameInput = document.getElementById('field-name');
+          if (nameInput && !nameInput.value) {
+            nameInput.value = file.name.replace(/\.[^/.]+$/, '');
+          }
+
+          const geoInput = document.getElementById('field-geojson');
+          if (geoInput) geoInput.value = JSON.stringify(geometry, null, 2);
+
+          this._setFieldModalStep('review', areaHa);
+        } catch (err) {
+          if (errEl) {
+            errEl.textContent = err.message || 'Erro ao carregar arquivo de coordenadas.';
+            errEl.style.display = 'block';
+          }
+        }
       });
     }
 
@@ -406,9 +489,17 @@ class AppController {
       fieldForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const name = document.getElementById('field-name')?.value.trim();
-        const crop = document.getElementById('field-crop')?.value.trim();
+        const crop = document.getElementById('field-activity-category')?.value || 'AGRICULTURA';
         const geoRaw = document.getElementById('field-geojson')?.value.trim();
         const errEl = document.getElementById('field-error-msg');
+
+        if (!geoRaw) {
+          if (errEl) {
+            errEl.textContent = 'Demarque os vértices no mapa ou faça upload do GeoJSON antes de salvar.';
+            errEl.style.display = 'block';
+          }
+          return;
+        }
 
         let polygon;
         try {
@@ -462,13 +553,66 @@ class AppController {
         this.openPropertyModal();
       });
     }
+  }
 
-    const modalDrawBtn = document.getElementById('btn-draw-field-modal');
-    if (modalDrawBtn) {
-      modalDrawBtn.addEventListener('click', () => {
-        this.closeFieldModal();
-        this.startInteractiveDrawing();
-      });
+  _setFieldModalStep(step, areaHa = 0) {
+    const step1El = document.getElementById('field-subview-step1');
+    const reviewEl = document.getElementById('field-subview-review');
+    const titleEl = document.getElementById('field-dialog-title');
+    const subtitleEl = document.getElementById('field-dialog-subtitle');
+    const adjustBtn = document.getElementById('btn-adjust-vertices');
+    const submitBtn = document.getElementById('btn-submit-field');
+
+    const node1 = document.getElementById('step-info-node');
+    const node2 = document.getElementById('step-draw-node');
+    const node3 = document.getElementById('step-review-node');
+    const line1 = document.getElementById('stepper-line-1');
+    const line2 = document.getElementById('stepper-line-2');
+
+    if (step === 'review') {
+      if (step1El) step1El.style.display = 'none';
+      if (reviewEl) reviewEl.style.display = 'block';
+      if (titleEl) titleEl.textContent = 'Revisão do Talhão';
+      if (subtitleEl) subtitleEl.textContent = 'Confirme os dados antes de salvar o monitoramento';
+      if (adjustBtn) adjustBtn.style.display = 'inline-block';
+      if (submitBtn) submitBtn.textContent = 'Salvar Talhão';
+
+      // Preenche dados do card de revisão
+      const fieldName = document.getElementById('field-name')?.value.trim() || 'Novo Talhão';
+      const propSelect = document.getElementById('field-property-select');
+      const propText = propSelect?.options[propSelect.selectedIndex]?.text || 'Fazenda Principal';
+      const activitySelect = document.getElementById('field-activity-category');
+      const activityText = activitySelect?.options[activitySelect.selectedIndex]?.text || 'Agricultura / Lavoura';
+
+      const revFieldName = document.getElementById('review-field-name');
+      const revPropName = document.getElementById('review-prop-name');
+      const revActivity = document.getElementById('review-activity-val');
+      const revArea = document.getElementById('review-area-val');
+
+      if (revFieldName) revFieldName.textContent = fieldName;
+      if (revPropName) revPropName.textContent = propText;
+      if (revActivity) revActivity.textContent = activityText;
+      if (revArea) revArea.textContent = `${areaHa.toFixed(2)} ha`;
+
+      // Atualiza Stepper
+      if (node1) { node1.className = 'stepper-item completed'; }
+      if (line1) { line1.className = 'stepper-line active'; }
+      if (node2) { node2.className = 'stepper-item completed'; }
+      if (line2) { line2.className = 'stepper-line active'; }
+      if (node3) { node3.className = 'stepper-item active'; }
+    } else {
+      if (step1El) step1El.style.display = 'block';
+      if (reviewEl) reviewEl.style.display = 'none';
+      if (titleEl) titleEl.textContent = 'Cadastrar Novo Talhão';
+      if (subtitleEl) subtitleEl.textContent = 'Defina os dados e desenhe o perímetro no mapa principal';
+      if (adjustBtn) adjustBtn.style.display = 'none';
+      if (submitBtn) submitBtn.textContent = 'Continuar para Desenho';
+
+      if (node1) { node1.className = 'stepper-item active'; }
+      if (line1) { line1.className = 'stepper-line'; }
+      if (node2) { node2.className = 'stepper-item'; }
+      if (line2) { line2.className = 'stepper-line'; }
+      if (node3) { node3.className = 'stepper-item'; }
     }
   }
 
@@ -481,10 +625,8 @@ class AppController {
       if (nameInput && !nameInput.value) {
         nameInput.value = `Novo Talhão (${areaHa.toFixed(1)} ha)`;
       }
-      const cropInput = document.getElementById('field-crop');
-      if (cropInput && !cropInput.value) {
-        cropInput.value = 'Café Robusta';
-      }
+
+      this._setFieldModalStep('review', areaHa);
     });
   }
 
@@ -518,6 +660,11 @@ class AppController {
             `<option value="${p.id}" ${p.id === activePropertyId ? 'selected' : ''}>${p.name}</option>`
           ).join('');
         }
+      }
+
+      const geoRaw = document.getElementById('field-geojson')?.value.trim();
+      if (!geoRaw) {
+        this._setFieldModalStep('info');
       }
 
       modal.style.display = 'flex';

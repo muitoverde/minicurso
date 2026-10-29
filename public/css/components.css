@@ -1079,3 +1079,317 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* ==========================================================================
+   ALVO CERTO DIALOG THEME (AddPropertyDialog & AddFieldDialog 1:1)
+   ========================================================================== */
+.alvo-certo-dialog {
+  border-radius: 16px !important;
+  border: 1px solid #FED7AA !important;
+  box-shadow: 0 12px 40px rgba(234, 88, 12, 0.16) !important;
+  background: #FFFFFF !important;
+  color: #0F172A !important;
+}
+
+.alvo-certo-header {
+  padding: 18px 24px !important;
+  border-bottom: 1px solid rgba(254, 215, 170, 0.6) !important;
+  background: linear-gradient(135deg, #FFFDF8 0%, #FFF7ED 100%) !important;
+}
+
+.dialog-header-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dialog-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.orange-badge {
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  color: #EA580C;
+}
+
+.dialog-header-titles .modal-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.dialog-header-titles .modal-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  font-weight: 500;
+  margin: 3px 0 0 0;
+}
+
+.alvo-certo-body {
+  padding: 24px !important;
+  background: #FFFFFF !important;
+}
+
+/* Stepper Visual */
+.alvo-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 0 8px;
+}
+
+.stepper-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 2;
+}
+
+.stepper-item .step-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #CBD5E1;
+  transition: all 0.2s ease;
+}
+
+.stepper-item .step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.stepper-item.active .step-circle {
+  background: #EA580C;
+  color: #FFFFFF;
+  border-color: #EA580C;
+  box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.15);
+}
+
+.stepper-item.active .step-label {
+  color: #EA580C;
+  font-weight: 800;
+}
+
+.stepper-item.completed .step-circle {
+  background: #16A34A;
+  color: #FFFFFF;
+  border-color: #16A34A;
+}
+
+.stepper-item.completed .step-label {
+  color: #16A34A;
+}
+
+.stepper-line {
+  flex: 1;
+  height: 2px;
+  background: #E2E8F0;
+  margin: 0 10px;
+  margin-bottom: 18px;
+}
+
+.stepper-line.active {
+  background: #EA580C;
+}
+
+/* Custom Inputs Alvo Certo */
+.custom-input, .custom-select {
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  font-size: 13px !important;
+  color: #0F172A !important;
+  background: #FFFFFF !important;
+  transition: border-color 0.2s;
+}
+
+.custom-input:focus, .custom-select:focus {
+  border-color: #EA580C !important;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12) !important;
+  outline: none;
+}
+
+.form-divider-label {
+  display: flex;
+  align-items: center;
+  margin: 18px 0 12px 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+/* Perimeter Options Grid */
+.perimeter-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.perimeter-card {
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.perimeter-card.active-method {
+  border: 2px solid #EA580C;
+  background: #FFF7ED;
+}
+
+.perimeter-card.active-method:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.15);
+}
+
+.perimeter-card.upload-method {
+  border: 1px dashed #FED7AA;
+  background: #FFFDF8;
+}
+
+.perimeter-card.upload-method:hover {
+  background: #FFF7ED;
+  border-color: #EA580C;
+}
+
+.perimeter-icon {
+  margin-bottom: 2px;
+}
+
+.orange-text {
+  color: #EA580C !important;
+}
+
+.green-text {
+  color: #16A34A !important;
+}
+
+.perimeter-info strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+.perimeter-info span {
+  font-size: 11px;
+  color: #64748B;
+  display: block;
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+/* Review Subview */
+.alvo-review-banner {
+  background: #F0FDF4;
+  border: 1px solid #86EFAC;
+  padding: 12px 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #166534;
+  margin-bottom: 16px;
+}
+
+.review-details-card {
+  background: #FFFDF8;
+  border: 1px solid #FED7AA;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 0.05em;
+}
+
+.review-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+.review-divider {
+  height: 1px;
+  background: rgba(254, 215, 170, 0.5);
+}
+
+/* Dialog Action Buttons */
+.dialog-actions-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(254, 215, 170, 0.5);
+}
+
+.btn-alvo-submit {
+  background: #EA580C !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  padding: 10px 22px !important;
+  border: none !important;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-alvo-submit:hover {
+  background: #C2410C !important;
+}
+
+.btn-outline-orange {
+  border: 1px solid #FED7AA !important;
+  color: #EA580C !important;
+  background: #FFF7ED !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  cursor: pointer;
+}
+
+.btn-outline-orange:hover {
+  border-color: #EA580C !important;
+  background: #FED7AA !important;
+}
