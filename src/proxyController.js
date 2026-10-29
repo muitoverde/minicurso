@@ -211,12 +211,65 @@ export function handleLogout(req, res) {
   });
 }
 
-// 4. Listagem de Propriedades (Fazendas)
-export function handleGetProperties(req, res) {
+// 4. Listagem de Propriedades (Fazendas) — Integrado com API Muito Verde via Chave B2B (.env.local)
+export async function handleGetProperties(req, res) {
   const db = readDb();
+  const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
+
+  if (effectiveApiKey && effectiveApiKey !== 'INSIRA_SUA_CHAVE_AQUI') {
+    try {
+      const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/mcp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': effectiveApiKey,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'tools/call',
+          params: {
+            name: 'mv_query_field_notebook',
+            arguments: { module: 'properties' },
+          },
+        }),
+      });
+
+      if (response.ok) {
+        const rpc = await response.json();
+        const textContent = rpc.result?.content?.[0]?.text;
+        if (textContent) {
+          const parsed = JSON.parse(textContent);
+          if (Array.isArray(parsed.properties) && parsed.properties.length > 0) {
+            const apiProperties = parsed.properties.map(p => ({
+              id: p.id,
+              name: p.name,
+              municipality: p.municipality || p.city || 'Rondônia',
+              car: p.carCode || '',
+              totalAreaHa: p.totalAreaHa || 0,
+              fieldsCount: p.fieldsCount || 0,
+            }));
+
+            // Mescla com propriedades criadas localmente para não perder dados locais
+            const localProperties = db.properties || [];
+            const merged = [...apiProperties];
+            for (const lp of localProperties) {
+              if (!merged.find(m => m.id === lp.id || m.name === lp.name)) {
+                merged.push(lp);
+              }
+            }
+            return sendJSON(res, 200, { success: true, properties: merged });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[proxyController] Consulta remota de propriedades via MCP falhou, usando local:', err.message);
+    }
+  }
+
   return sendJSON(res, 200, {
     success: true,
-    properties: db.properties || []
+    properties: db.properties || [],
   });
 }
 
@@ -258,20 +311,60 @@ export async function handleCreateProperty(req, res) {
   }
 }
 
-// 6. Listagem de Talhões (Campos)
-export function handleGetFields(req, res, url) {
+// 6. Listagem de Talhões (Campos) — Integrado com API Muito Verde via Chave B2B (.env.local)
+export async function handleGetFields(req, res, url) {
   const db = readDb();
   const propertyId = url.searchParams.get('propertyId');
-  const allFields = db.fields || [];
-  const filtered = propertyId ? allFields.filter(f => f.propertyId === propertyId) : allFields;
+  const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
+
+  let remoteFields = [];
+  if (effectiveApiKey && effectiveApiKey !== 'INSIRA_SUA_CHAVE_AQUI') {
+    try {
+      const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/fields`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-API-Key': effectiveApiKey,
+        },
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        const apiFields = json.data?.fields || [];
+        remoteFields = apiFields.map(f => ({
+          id: f.id,
+          propertyId: f.propertyId || propertyId || null,
+          name: f.name,
+          crop: f.crop || 'SAF Agroflorestal',
+          areaHectares: f.areaHectares || 0,
+          polygon: f.geometry,
+          latestNdvi: f.latestNdvi || null,
+          latestDate: f.latestCaptureDate || null,
+          source: f.source || 'muitoverde_b2b',
+        }));
+      }
+    } catch (err) {
+      console.warn('[proxyController] Consulta de talhões via API falhou, usando local:', err.message);
+    }
+  }
+
+  const localFields = db.fields || [];
+  const merged = [...remoteFields];
+  for (const lf of localFields) {
+    if (!merged.find(m => m.id === lf.id)) {
+      merged.push(lf);
+    }
+  }
+
+  const filtered = propertyId ? merged.filter(f => !f.propertyId || f.propertyId === propertyId) : merged;
 
   return sendJSON(res, 200, {
     success: true,
-    fields: filtered
+    fields: filtered,
   });
 }
 
-// 7. Cadastro de Talhão
+// 7. Cadastro de Talhão — Persistência Híbrida (API Muito Verde B2B + Cache Local)
 export async function handleCreateField(req, res) {
   try {
     const payload = await parseJSONBody(req);
@@ -280,53 +373,92 @@ export async function handleCreateField(req, res) {
     if (!name || !crop || !polygon) {
       return sendJSON(res, 400, {
         success: false,
-        error: 'Campos "name", "crop" e "polygon" são obrigatórios.'
+        error: 'Campos "name", "crop" e "polygon" são obrigatórios.',
       });
     }
 
     const db = readDb();
-    let effectivePropId = propertyId;
-    if (!effectivePropId && db.properties?.length > 0) {
-      effectivePropId = db.properties[0].id;
+    const effectiveApiKey = db.session?.apiKey || config.MUITOVERDE_API_KEY;
+
+    let createdField = null;
+
+    // Tenta persistir diretamente na API Muito Verde
+    if (effectiveApiKey && effectiveApiKey !== 'INSIRA_SUA_CHAVE_AQUI') {
+      try {
+        const response = await fetch(`${config.MUITOVERDE_BASE_URL}/api/b2b/v1/geo/fields`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': effectiveApiKey,
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            crop: crop.trim(),
+            propertyId: propertyId || undefined,
+            polygon,
+          }),
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          const rf = json.data?.field;
+          if (rf) {
+            createdField = {
+              id: rf.id,
+              propertyId: propertyId || null,
+              name: rf.name,
+              crop: rf.crop,
+              areaHectares: rf.areaHectares,
+              polygon: rf.geometry,
+              createdAt: new Date().toISOString(),
+              source: 'muitoverde_b2b',
+            };
+          }
+        }
+      } catch (netErr) {
+        console.warn('[proxyController] Falha ao enviar talhão para API B2B, gravando localmente:', netErr.message);
+      }
     }
 
-    // Calcula área em hectares estimada a partir do polígono se não fornecida
-    let calculatedArea = 0;
-    try {
-      const coords = polygon.coordinates?.[0] || [];
-      if (coords.length >= 3) {
-        let area = 0;
-        for (let i = 0; i < coords.length - 1; i++) {
-          area += (coords[i][0] * coords[i + 1][1]) - (coords[i + 1][0] * coords[i][1]);
+    // Se a API não respondeu ou houve falha, cria localmente
+    if (!createdField) {
+      let calculatedArea = 0;
+      try {
+        const coords = polygon.coordinates?.[0] || [];
+        if (coords.length >= 3) {
+          let area = 0;
+          for (let i = 0; i < coords.length - 1; i++) {
+            area += (coords[i][0] * coords[i + 1][1]) - (coords[i + 1][0] * coords[i][1]);
+          }
+          area = Math.abs(area) / 2;
+          calculatedArea = Math.round(area * 111320 * 111320 * Math.cos(-9.94 * Math.PI / 180) / 10000 * 10) / 10;
         }
-        area = Math.abs(area) / 2;
-        // Conversão aproximada para hectares (~111.32km por grau)
-        calculatedArea = Math.round(area * 111320 * 111320 * Math.cos(-9.94 * Math.PI / 180) / 10000 * 10) / 10;
-      }
-    } catch {}
+      } catch {}
 
-    const newField = {
-      id: 'field_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-      propertyId: effectivePropId || null,
-      name: name.trim(),
-      crop: crop.trim(),
-      areaHectares: calculatedArea > 0 ? calculatedArea : 4.8,
-      polygon,
-      createdAt: new Date().toISOString()
-    };
+      createdField = {
+        id: 'field_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+        propertyId: propertyId || null,
+        name: name.trim(),
+        crop: crop.trim(),
+        areaHectares: calculatedArea > 0 ? calculatedArea : 4.8,
+        polygon,
+        createdAt: new Date().toISOString(),
+        source: 'local_db',
+      };
+    }
 
     db.fields = db.fields || [];
-    db.fields.push(newField);
+    db.fields.push(createdField);
     writeDb(db);
 
     return sendJSON(res, 201, {
       success: true,
-      field: newField
+      field: createdField,
     });
   } catch (err) {
     return sendJSON(res, 400, {
       success: false,
-      error: err.message
+      error: err.message,
     });
   }
 }
