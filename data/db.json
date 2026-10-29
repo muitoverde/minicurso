@@ -1,0 +1,72 @@
+{
+  "session": {
+    "authenticated": true,
+    "apiKey": "mv_test_MWZFjmcJCJ9C5053eFFQ05xR1yNGnrcD6xS1j3Oej60",
+    "user": {
+      "id": "af2c3fd2-613b-4b63-a885-fa788593e2a6",
+      "name": "kawanvicentin",
+      "email": "kawanvicentin@gmail.com",
+      "tier": "CNPJ",
+      "environment": "sandbox"
+    },
+    "wallet": {
+      "tier": "CNPJ",
+      "quota": "—",
+      "balance": "—",
+      "credits": 30205
+    }
+  },
+  "properties": [
+    {
+      "id": "prop_mvsvi11imsqk",
+      "name": "teste",
+      "municipality": "tes",
+      "car": "",
+      "createdAt": "2026-10-29T01:37:04.710Z"
+    },
+    {
+      "id": "prop_mvsvi4761inp",
+      "name": "Campus Ariquemes IFRO",
+      "municipality": "Ariquemes/RO",
+      "car": "RO-1100023-F6A7B2C3D4E5F6A7B2C3D4E5F6A7B2C3",
+      "createdAt": "2026-10-29T01:37:08.802Z"
+    }
+  ],
+  "fields": [
+    {
+      "id": "field_mvsvi993gebj",
+      "propertyId": "prop_mvsvi4761inp",
+      "name": "Cacau Clonal em SAF — IFRO Ariquemes",
+      "crop": "Cacau SAF",
+      "areaHectares": 23.4,
+      "polygon": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -62.9642,
+              -9.9442
+            ],
+            [
+              -62.9594,
+              -9.9442
+            ],
+            [
+              -62.9594,
+              -9.9482
+            ],
+            [
+              -62.9642,
+              -9.9482
+            ],
+            [
+              -62.9642,
+              -9.9442
+            ]
+          ]
+        ]
+      },
+      "createdAt": "2026-10-29T01:37:15.351Z"
+    }
+  ]
+}

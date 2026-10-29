@@ -1,0 +1,210 @@
+/* Design System MVSky Monitor - Layout Base & Grid */
+:root {
+  --font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  
+  /* Cores Agro Muito Verde */
+  --color-bg: #002824;
+  --color-surface: #003732;
+  --color-surface-glass: rgba(0, 40, 36, 0.88);
+  --color-forest: #002824;
+  --color-forest-deep: #003732;
+  --color-emerald: #10b981;
+  --color-emerald-dark: #059669;
+  --color-emerald-light: #34d399;
+  --color-cyan: #06b6d4;
+  --color-yellow: #eab308;
+  --color-red: #ef4444;
+  
+  /* Cores de Texto */
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  
+  /* Bordas e Sombras */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-emerald: rgba(16, 185, 129, 0.28);
+  --shadow-hud: 0 12px 36px rgba(0, 0, 0, 0.45);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg);
+  color: var(--text-main);
+}
+
+/* Canvas do Mapa em Tela Cheia */
+#map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 1;
+  background-color: #050a08;
+}
+
+/* Header Superior Flutuante */
+#app-header {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  height: 56px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 16px;
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hud);
+}
+
+/* Gaveta Lateral Flutuante (380px) */
+#monitoring-panel {
+  position: absolute;
+  top: 84px;
+  right: 16px;
+  bottom: 24px;
+  width: 380px;
+  z-index: 1000;
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-hud);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#monitoring-panel.collapsed {
+  transform: translateX(calc(100% + 24px));
+}
+
+/* Botão Toggle da Gaveta */
+#btn-toggle-drawer {
+  position: absolute;
+  top: 96px;
+  right: 408px;
+  z-index: 1000;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-main);
+  cursor: pointer;
+  box-shadow: var(--shadow-hud);
+  transition: all 0.2s ease;
+}
+
+#btn-toggle-drawer:hover {
+  background: var(--color-surface);
+  border-color: var(--color-emerald);
+  color: var(--color-emerald-light);
+}
+
+#btn-toggle-drawer.drawer-collapsed {
+  right: 20px;
+  transform: rotate(180deg);
+}
+
+/* Legenda Inferior Direita */
+#color-legend {
+  position: absolute;
+  bottom: 24px;
+  right: 412px;
+  z-index: 900;
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hud);
+  padding: 10px 14px;
+  width: 240px;
+  transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#color-legend.drawer-collapsed {
+  right: 24px;
+}
+
+/* Modais de Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2000;
+  background: rgba(0, 20, 18, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-container {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-hud);
+  overflow: hidden;
+  animation: modalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  0% { transform: scale(0.94); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  #monitoring-panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 60vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  #btn-toggle-drawer {
+    display: none;
+  }
+  #color-legend {
+    display: none;
+  }
+  #wallet-chips {
+    display: none !important;
+  }
+}
