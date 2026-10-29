@@ -11,10 +11,10 @@ import {
   handleAnalyze
 } from './src/proxyController.js';
 import { handleStatic } from './src/staticController.js';
+import { handleMutation } from './src/accountController.js';
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, Idempotency-Key');
 
   if (req.method === 'OPTIONS') {
@@ -25,6 +25,14 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const { pathname } = url;
   const method = req.method;
+
+  // Cookies de sessão só podem ser usados pelo próprio minicurso.
+  if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) {
+    res.writeHead(403); return res.end();
+  }
+  if (pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+  const entity = pathname.match(/^\/api\/(properties|fields)\/([a-zA-Z0-9_-]+)$/);
+  if (entity && ['PUT', 'DELETE'].includes(method)) return handleMutation(req, res, entity[1], entity[2]);
 
   if (method === 'POST' && pathname === '/api/auth/login') {
     return handleLogin(req, res);

@@ -138,6 +138,8 @@
 
       <!-- Estado Logado (Hierarquia Fazenda -> Talhão com Mini Hero Alvo Certo) -->
       <div id="logged-fields-view" class="logged-fields-container" style="display:none;">
+        <div id="account-data-error" class="form-error" role="alert" style="display:none;"></div>
+        <button id="btn-reload-account" class="btn btn-sm" type="button">Atualizar dados</button>
         <!-- Mini Hero Meus Talhões (Alvo Certo) -->
         <div class="campos-mini-hero">
           <div class="campos-hero-top">
@@ -196,6 +198,10 @@
             <select id="property-select" class="form-select"></select>
             <button id="btn-new-property" class="btn btn-sm btn-outline-orange" title="Cadastrar Nova Fazenda">+ Nova Fazenda</button>
           </div>
+          <div class="account-actions">
+            <button id="btn-edit-property" type="button" class="btn btn-sm">Editar fazenda</button>
+            <button id="btn-delete-property" type="button" class="btn btn-sm">Excluir fazenda</button>
+          </div>
           <div id="property-empty-state" class="empty-state" style="display:none;">
             <p class="empty-state-text">Nenhuma fazenda cadastrada nesta conta.</p>
             <button id="btn-empty-new-property" class="btn-empty-action">Adicionar fazenda</button>
@@ -204,6 +210,10 @@
 
         <!-- Nível 2: Talhões da Fazenda Ativa -->
         <div class="fields-section">
+          <div class="account-actions">
+            <button id="btn-edit-field" type="button" class="btn btn-sm">Editar talhão selecionado</button>
+            <button id="btn-delete-field" type="button" class="btn btn-sm">Excluir talhão selecionado</button>
+          </div>
           <div id="fields-container" class="fields-list"></div>
 
           <div id="fields-empty-state" class="empty-state" style="display:none;">
@@ -378,23 +388,20 @@
           <form id="auth-form" class="modal-form">
             <div class="form-group">
               <label for="auth-email" class="form-label">Email do Produtor / Conta</label>
-              <input type="email" id="auth-email" class="form-input" placeholder="seu@email.com" value="produtor@muitoverde.com.br" required autocomplete="username" />
+              <input type="email" id="auth-email" class="form-input" placeholder="seu@email.com" required autocomplete="username" />
             </div>
             <div class="form-group">
               <label for="auth-password" class="form-label">Senha</label>
-              <input type="password" id="auth-password" class="form-input" placeholder="••••••••" value="••••••••" required autocomplete="current-password" />
+              <input type="password" id="auth-password" class="form-input" placeholder="••••••••" required autocomplete="current-password" />
             </div>
             <div class="form-row-checkbox">
-              <label class="checkbox-label">
-                <input type="checkbox" id="auth-remember-me" checked />
-                <span>Lembrar de mim</span>
-              </label>
+<span>Sessão válida por até 8 horas</span>
               <button type="button" id="btn-switch-forgot" class="btn-text-link">Esqueceu a senha?</button>
             </div>
             <div id="auth-error-msg" class="form-error" style="display:none;"></div>
             <button type="submit" class="btn btn-primary btn-full" style="background:#EA580C; font-weight:700;">Entrar na Plataforma</button>
             <div class="auth-key-status" style="font-size: 11px; color: #64748B; text-align: center; margin-top: 10px;">
-              Autenticação integrada via API Muito Verde (.env.local)
+              Use o mesmo e-mail e senha da sua conta Muito Verde / Alvo Certo.
             </div>
           </form>
 
@@ -474,13 +481,9 @@
           </div>
           <div class="form-group">
             <label for="prop-municipality" class="form-label">Localização / Município (Opcional)</label>
-            <input type="text" id="prop-municipality" class="form-input custom-input" placeholder="Ex: Ariquemes - RO / Rodovia BR-364, Km 50" />
+            <textarea id="prop-municipality" class="form-input custom-input" rows="2" placeholder="Ex: Ariquemes - RO / Rodovia BR-364, Km 50"></textarea>
           </div>
-          <div class="form-group">
-            <label for="prop-car" class="form-label">Cadastro Ambiental Rural (CAR - Opcional)</label>
-            <input type="text" id="prop-car" class="form-input custom-input" placeholder="Ex: RO-1100023-8F92A4C1E3B74D09A112C5E80019B2A4" />
-          </div>
-          <div id="prop-error-msg" class="form-error" style="display:none;"></div>
+          <div role="alert" id="prop-error-msg" class="form-error" style="display:none;"></div>
           <div class="dialog-actions-footer">
             <button type="button" class="btn btn-text-link" id="btn-cancel-prop">Cancelar</button>
             <button type="submit" class="btn btn-primary btn-alvo-submit">Cadastrar Fazenda</button>
@@ -541,8 +544,8 @@
                 <option value="AGRICULTURA">Agricultura / Lavoura</option>
                 <option value="PECUARIA_CORTE">Pecuária de Corte</option>
                 <option value="PECUARIA_LEITE">Pecuária de Leite</option>
-                <option value="HORTIFRUTI">Hortifrúti / Fruticultura</option>
-                <option value="SILVICULTURA">Silvicultura / Florestal</option>
+                <option value="AVICULTURA">Avicultura</option>
+                <option value="PISCICULTURA">Piscicultura</option><option value="APICULTURA">Apicultura</option>
                 <option value="OUTRA">Outra Atividade</option>
               </select>
             </div>
@@ -635,7 +638,7 @@
             </div>
           </div>
 
-          <div id="field-error-msg" class="form-error" style="display:none;"></div>
+          <div role="alert" id="field-error-msg" class="form-error" style="display:none;"></div>
 
           <div class="dialog-actions-footer">
             <button type="button" class="btn btn-text-link" id="btn-cancel-field">Cancelar</button>

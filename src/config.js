@@ -17,7 +17,7 @@ function loadEnv() {
       const eqIdx = trimmed.indexOf('=');
       if (eqIdx !== -1) {
         const key = trimmed.slice(0, eqIdx).trim();
-        const value = trimmed.slice(eqIdx + 1).trim();
+        const value = trimmed.slice(eqIdx + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
         if (key && !(key in process.env)) {
           process.env[key] = value;
         }
@@ -29,6 +29,8 @@ function loadEnv() {
 loadEnv();
 
 export const config = {
+  FIREBASE_API_KEY: process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
+  SECURE_COOKIE: process.env.SECURE_COOKIE === 'true',
   PORT: parseInt(process.env.PORT || '3333', 10),
   MUITOVERDE_API_KEY: process.env.MUITOVERDE_API_KEY || '',
   MUITOVERDE_BASE_URL: (process.env.MUITOVERDE_BASE_URL || 'https://muitoverde.com.br')

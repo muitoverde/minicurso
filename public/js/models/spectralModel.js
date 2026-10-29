@@ -1,4 +1,18 @@
 class SpectralModel {
+  async mutate(resource, id, method, body) {
+    const res = await fetch(`/api/${resource}/${encodeURIComponent(id)}`, {
+      method, headers: { 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    const data = await res.json();
+    if (!res.ok || data.success === false) throw new Error(data.error || 'Não foi possível salvar a alteração.');
+    return data.property || data.field || data;
+  }
+  updateProperty(id, data) { return this.mutate('properties', id, 'PUT', data); }
+  deleteProperty(id) { return this.mutate('properties', id, 'DELETE'); }
+  updateField(id, data) { return this.mutate('fields', id, 'PUT', data); }
+  deleteField(id) { return this.mutate('fields', id, 'DELETE'); }
+
   async getSession() {
     const res = await fetch('/api/auth/session');
     if (!res.ok) throw new Error('Falha ao obter sessão');
@@ -26,8 +40,8 @@ class SpectralModel {
 
   async getProperties() {
     const res = await fetch('/api/properties');
-    if (!res.ok) throw new Error('Falha ao listar fazendas');
     const data = await res.json();
+    if (!res.ok || data.success === false) throw new Error(data.error || 'Falha ao listar fazendas');
     return data.properties || [];
   }
 
@@ -47,8 +61,8 @@ class SpectralModel {
   async getFields(propertyId = '') {
     const url = propertyId ? `/api/fields?propertyId=${encodeURIComponent(propertyId)}` : '/api/fields';
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Falha ao listar talhões');
     const data = await res.json();
+    if (!res.ok || data.success === false) throw new Error(data.error || 'Falha ao listar talhões');
     return data.fields || [];
   }
 

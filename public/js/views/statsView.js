@@ -1,3 +1,4 @@
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 class StatsView {
   constructor() {
     this.lastComputation = null;
@@ -30,8 +31,8 @@ class StatsView {
     select.style.display = 'block';
     emptyState.style.display = 'none';
     select.innerHTML = properties.map(p => `
-      <option value="${p.id}" ${p.id === activePropertyId ? 'selected' : ''}>
-        ${p.name} (${p.municipality})
+      <option value="${escapeHTML(p.id)}" ${p.id === activePropertyId ? 'selected' : ''}>
+        ${escapeHTML(p.name)} (${escapeHTML(p.municipality)})
       </option>
     `).join('');
 
@@ -84,10 +85,10 @@ class StatsView {
       container.innerHTML = fields.map(f => {
         const isActive = f.id === activeFieldId;
         return `
-          <div class="field-list-item ${isActive ? 'active' : ''}" data-id="${f.id}">
+          <div class="field-list-item ${isActive ? 'active' : ''}" data-id="${escapeHTML(f.id)}">
             <div>
-              <div class="field-list-title">${f.name}</div>
-              <span class="badge-crop" style="font-size:10px;">${f.crop}</span>
+              <div class="field-list-title">${escapeHTML(f.name)}</div>
+              <span class="badge-crop" style="font-size:10px;">${escapeHTML(f.crop)}</span>
             </div>
             <div style="font-size:11px;font-weight:700;color:var(--color-emerald-light);">
               ${f.areaHectares ? f.areaHectares.toFixed(1) + ' ha' : 'Demarcado'}
@@ -101,14 +102,14 @@ class StatsView {
         const isActive = f.id === activeFieldId;
         const svgMini = this._generateFieldMiniSvg(f.polygon);
         return `
-          <div class="field-card ${isActive ? 'active' : ''}" data-id="${f.id}">
+          <div class="field-card ${isActive ? 'active' : ''}" data-id="${escapeHTML(f.id)}">
             <div class="field-card-preview">
               ${svgMini}
             </div>
             <div class="field-card-info">
-              <div class="field-card-title">${f.name}</div>
+              <div class="field-card-title">${escapeHTML(f.name)}</div>
               <div class="field-card-meta">
-                <span class="badge-crop">${f.crop}</span>
+                <span class="badge-crop">${escapeHTML(f.crop)}</span>
                 <span>${f.areaHectares ? f.areaHectares.toFixed(1) + ' ha' : 'Área demarcada'}</span>
               </div>
             </div>

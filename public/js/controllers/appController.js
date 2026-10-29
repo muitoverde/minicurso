@@ -45,6 +45,7 @@ class AppController {
 
     // 5. Vincula modais de Fazenda e Talhão com snippets oficiais
     this._setupPropertyAndFieldModals();
+    this._setupAccountActions();
 
     // 6. Vincula controles de Meus Talhões (Mini Hero Alvo Certo)
     this._setupCamposHeroControls();
@@ -73,13 +74,14 @@ class AppController {
     } else {
       if (guestCard) guestCard.style.display = 'block';
       if (loggedView) loggedView.style.display = 'none';
-      stateModel.setState({ properties: [], fields: [], activeComputation: null, activeFieldId: null });
+      stateModel.setState({ properties: [], activePropertyId: null, fields: [], activeComputation: null, activeFieldId: null });
       statsView.reset();
       heatmapView.clear(mapView.getMap());
     }
   }
 
   async loadProperties() {
+    this.showAccountError('');
     try {
       const properties = await spectralModel.getProperties();
       const currentActive = stateModel.getState().activePropertyId;
@@ -90,7 +92,7 @@ class AppController {
         properties,
         activePropertyId,
         async (selectedId) => {
-          stateModel.setState({ activePropertyId: selectedId });
+          stateModel.setState({ activePropertyId: selectedId, activeFieldId: null, activeComputation: null });
           await this.loadFields(selectedId);
         },
         () => this.openPropertyModal()
@@ -99,10 +101,18 @@ class AppController {
       if (activePropertyId) {
         await this.loadFields(activePropertyId);
       } else {
+        this.clearFieldSelection();
+        stateModel.setState({ fields: [] });
         statsView.renderFieldCards([], null, null, () => this.openFieldModal());
       }
     } catch (err) {
-      console.error('[appController] Erro ao carregar propriedades:', err);
+      this.showAccountError(err.message);
+      stateModel.setState({ properties: [], activePropertyId: null, fields: [] });
+      this.clearFieldSelection();
+      document.getElementById('property-select').replaceChildren();
+      document.getElementById('fields-container').replaceChildren();
+      document.getElementById('property-empty-state').style.display = 'none';
+      document.getElementById('fields-empty-state').style.display = 'none';
     }
   }
 
@@ -120,12 +130,16 @@ class AppController {
         () => this.openFieldModal()
       );
 
-      // Se houver talhões e nenhum selecionado, seleciona o primeiro automaticamente
+      if (!fields.some(f => f.id === stateModel.getState().activeFieldId)) this.clearFieldSelection();
       if (fields.length > 0 && !stateModel.getState().activeFieldId) {
         await this.selectField(fields[0]);
       }
     } catch (err) {
-      console.error('[appController] Erro ao carregar talhões:', err);
+      this.showAccountError(err.message);
+      stateModel.setState({ fields: [] });
+      this.clearFieldSelection();
+      document.getElementById('fields-container').replaceChildren();
+      document.getElementById('fields-empty-state').style.display = 'none';
     }
   }
 
@@ -351,6 +365,44 @@ class AppController {
     if (guestLoginBtn) guestLoginBtn.addEventListener('click', () => authModalView.open('login'));
   }
 
+  showAccountError(message) {
+    const el = document.getElementById('account-data-error');
+    el.textContent = message; el.style.display = message ? 'block' : 'none';
+  }
+
+  clearFieldSelection() {
+    stateModel.setState({ activeFieldId: null, activeComputation: null });
+    statsView.reset(); heatmapView.clear(mapView.getMap()); mapView.renderFieldBoundary(null);
+  }
+
+  _setupAccountActions() {
+    document.getElementById('btn-reload-account').onclick = () => this.loadProperties();
+    for (const type of ['property', 'field']) {
+      const selected = () => {
+        const state = stateModel.getState();
+        return type === 'property' ? state.properties.find(p => p.id === state.activePropertyId) : state.fields.find(f => f.id === state.activeFieldId);
+      };
+      document.getElementById(`btn-edit-${type}`).onclick = () => {
+        const item = selected();
+        if (!item) return this.showAccountError('Selecione uma fazenda ou talhão primeiro.');
+        if (type === 'property') this.openPropertyModal(item); else this.openFieldModal(item);
+      };
+      document.getElementById(`btn-delete-${type}`).onclick = async (event) => {
+        const item = selected();
+        if (!item) return this.showAccountError('Selecione uma fazenda ou talhão primeiro.');
+        if (!window.confirm(`Excluir "${item.name}"? Esta ação não pode ser desfeita.`)) return;
+        event.currentTarget.disabled = true;
+        try {
+          if (type === 'property') await spectralModel.deleteProperty(item.id);
+          else await spectralModel.deleteField(item.id);
+          this.clearFieldSelection();
+          await this.loadProperties();
+        } catch (err) { this.showAccountError(err.message); }
+        finally { document.getElementById(`btn-delete-${type}`).disabled = false; }
+      };
+    }
+  }
+
   _setupPropertyAndFieldModals() {
     // Modal Fazenda (Propriedade)
     const propModal = document.getElementById('property-modal');
@@ -371,22 +423,25 @@ class AppController {
         e.preventDefault();
         const name = document.getElementById('prop-name')?.value.trim();
         const municipality = document.getElementById('prop-municipality')?.value.trim();
-        const car = document.getElementById('prop-car')?.value.trim();
+        const submit = propForm.querySelector('[type=submit]');
+        if (submit.disabled) return;
+        submit.disabled = true;
         const errEl = document.getElementById('prop-error-msg');
 
         try {
-          const newProp = await spectralModel.createProperty({ name, municipality, car });
+          const newProp = this.editingPropertyId
+            ? await spectralModel.updateProperty(this.editingPropertyId, { name, municipality })
+            : await spectralModel.createProperty({ name, municipality });
+          stateModel.setState({ activePropertyId: newProp.id, activeFieldId: null });
           this.closePropertyModal();
           propForm.reset();
           await this.loadProperties();
-          stateModel.setState({ activePropertyId: newProp.id });
-          await this.loadFields(newProp.id);
         } catch (err) {
           if (errEl) {
             errEl.textContent = err.message || 'Erro ao cadastrar propriedade.';
             errEl.style.display = 'block';
           }
-        }
+        } finally { submit.disabled = false; }
       });
     }
 
@@ -494,9 +549,9 @@ class AppController {
         const errEl = document.getElementById('field-error-msg');
 
         if (!geoRaw) {
+          cardDrawMap.click();
           if (errEl) {
-            errEl.textContent = 'Demarque os vértices no mapa ou faça upload do GeoJSON antes de salvar.';
-            errEl.style.display = 'block';
+            errEl.style.display = 'none';
           }
           return;
         }
@@ -515,6 +570,9 @@ class AppController {
           return;
         }
 
+        const submit = fieldForm.querySelector('[type=submit]');
+        if (submit.disabled) return;
+        submit.disabled = true;
         try {
           const propSelect = document.getElementById('field-property-select');
           const propertyId = propSelect?.value || stateModel.getState().activePropertyId;
@@ -527,23 +585,24 @@ class AppController {
             return;
           }
 
-          const newField = await spectralModel.createField({
-            propertyId,
-            name,
-            crop,
-            polygon
-          });
+          const fieldData = { propertyId, name, activityCategory: crop, crop: this.editingFieldCrop || crop, polygon };
+          const newField = this.editingFieldId
+            ? await spectralModel.updateField(this.editingFieldId, fieldData)
+            : await spectralModel.createField(fieldData);
+          this.editingFieldId = null;
+          this.editingFieldCrop = null;
 
           this.closeFieldModal();
           fieldForm.reset();
-          await this.loadFields(propertyId);
+          stateModel.setState({ activePropertyId: propertyId, activeFieldId: newField.id });
+          await this.loadProperties();
           await this.selectField(newField);
         } catch (err) {
           if (errEl) {
             errEl.textContent = err.message || 'Erro ao cadastrar talhão.';
             errEl.style.display = 'block';
           }
-        }
+        } finally { submit.disabled = false; }
       });
     }
 
@@ -618,7 +677,7 @@ class AppController {
 
   startInteractiveDrawing() {
     mapView.startDrawing((polygon, areaHa) => {
-      this.openFieldModal();
+      this.openFieldModal(null, true);
       const geoInput = document.getElementById('field-geojson');
       if (geoInput) geoInput.value = JSON.stringify(polygon, null, 2);
       const nameInput = document.getElementById('field-name');
@@ -630,7 +689,13 @@ class AppController {
     });
   }
 
-  openPropertyModal() {
+  openPropertyModal(property = null) {
+    this.editingPropertyId = property?.id || null;
+    document.getElementById('property-form').reset();
+    document.getElementById('prop-name').value = property?.name || '';
+    document.getElementById('prop-municipality').value = property?.municipality || '';
+    document.querySelector('#property-modal .modal-title').textContent = property ? 'Editar Propriedade / Fazenda' : 'Nova Propriedade / Fazenda';
+    document.querySelector('#property-form [type=submit]').textContent = property ? 'Salvar alterações' : 'Cadastrar Fazenda';
     const modal = document.getElementById('property-modal');
     if (modal) {
       const errEl = document.getElementById('prop-error-msg');
@@ -644,7 +709,16 @@ class AppController {
     if (modal) modal.style.display = 'none';
   }
 
-  openFieldModal() {
+  openFieldModal(field = null, resume = false) {
+    if (!resume) {
+      this.editingFieldId = field?.id || null;
+      this.editingFieldCrop = field?.primary_activity_species || null;
+      document.getElementById('field-form').reset();
+      document.getElementById('field-name').value = field?.name || '';
+      document.getElementById('field-activity-category').value = field?.primary_activity_category || 'AGRICULTURA';
+      document.getElementById('field-geojson').value = field?.polygon ? JSON.stringify(field.polygon) : '';
+      this._setFieldModalStep('info');
+    }
     const modal = document.getElementById('field-modal');
     if (modal) {
       const errEl = document.getElementById('field-error-msg');
@@ -656,12 +730,15 @@ class AppController {
         if (!properties || properties.length === 0) {
           propSelect.innerHTML = '<option value="">Nenhuma fazenda cadastrada — clique em + Nova Fazenda</option>';
         } else {
-          propSelect.innerHTML = properties.map(p =>
-            `<option value="${p.id}" ${p.id === activePropertyId ? 'selected' : ''}>${p.name}</option>`
-          ).join('');
+          propSelect.replaceChildren(...properties.map(p => new Option(p.name, p.id, false, p.id === activePropertyId)));
         }
       }
 
+      if (field && propSelect) propSelect.value = field.propertyId;
+      if (field) {
+        document.getElementById('field-dialog-title').textContent = 'Editar Talhão';
+        document.getElementById('btn-submit-field').textContent = 'Salvar alterações';
+      }
       const geoRaw = document.getElementById('field-geojson')?.value.trim();
       if (!geoRaw) {
         this._setFieldModalStep('info');

@@ -47,10 +47,10 @@ class AuthModalView {
 
     // Alternância de views no modal
     if (switchSignupBtn) {
-      switchSignupBtn.addEventListener('click', () => this.switchView('signup'));
+      switchSignupBtn.addEventListener('click', () => window.open('https://muitoverde.com.br/login?view=signup', '_blank', 'noopener'));
     }
     if (switchForgotBtn) {
-      switchForgotBtn.addEventListener('click', () => this.switchView('forgot'));
+      switchForgotBtn.addEventListener('click', () => window.open('https://muitoverde.com.br/login', '_blank', 'noopener'));
     }
     backToLoginBtns.forEach(btn => {
       btn.addEventListener('click', () => this.switchView('login'));
@@ -65,33 +65,20 @@ class AuthModalView {
         const email = emailInput ? emailInput.value.trim() : '';
         const password = passInput ? passInput.value : '';
         if (this.onLoginCallback) {
-          await this.onLoginCallback({ email, password });
+          const button = authForm.querySelector('[type="submit"]');
+          button.disabled = true; button.textContent = 'Entrando…';
+          try { await this.onLoginCallback({ email, password }); }
+          finally { button.disabled = false; button.textContent = 'Entrar na Plataforma'; passInput.value = ''; }
         }
       });
     }
 
-    // Submissão Cadastro Rápido (SignUp)
-    if (signupForm) {
-      signupForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = document.getElementById('signup-name')?.value.trim();
-        const email = document.getElementById('signup-email')?.value.trim();
-        const errEl = document.getElementById('signup-error-msg');
-        // No minicurso, o cadastro gera uma credencial sandbox instantânea
-        if (this.onLoginCallback) {
-          await this.onLoginCallback('');
-        }
-      });
-    }
-
-    // Submissão Esqueci a Senha
-    if (forgotForm) {
-      forgotForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const succEl = document.getElementById('forgot-success-msg');
-        if (succEl) succEl.style.display = 'block';
-      });
-    }
+    if (signupForm) signupForm.addEventListener('submit', e => {
+      e.preventDefault(); window.open('https://muitoverde.com.br/login?view=signup', '_blank', 'noopener');
+    });
+    if (forgotForm) forgotForm.addEventListener('submit', e => {
+      e.preventDefault(); window.open('https://muitoverde.com.br/login', '_blank', 'noopener');
+    });
   }
 
   open(view = 'login') {
